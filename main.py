@@ -23,7 +23,7 @@ import src.metadata
 
 colorama.init()
 print(
-    "====================================================\n\033[96m               libDrive - \033[92mv1.2.6\033[94m\n                   @eliasbenb\033[0m\n====================================================\n"
+    "====================================================\n\033[96m               libDrive - \033[92mv1.2.7\033[94m\n                   @eliasbenb\033[0m\n====================================================\n"
 )
 
 
@@ -83,10 +83,10 @@ def threaded_metadata():
             print("DONE.\n")
             return (
                 {
-                    "error": {
-                        "code": 500,
-                        "message": "libDrive is already building metadata, please wait.",
-                    }
+                    "code": 500,
+                    "content": None,
+                    "message": "libDrive is already building metadata, please wait.",
+                    "success": False,
                 },
                 500,
             )
@@ -104,10 +104,10 @@ def threaded_metadata():
             w.write(json.dumps([]))
     return (
         {
-            "success": {
-                "code": 200,
-                "message": "libDrive is building your new metadata",
-            }
+            "code": 200,
+            "content": None,
+            "message": "libDrive is building your new metadata.",
+            "success": True,
         },
         200,
     )
@@ -116,13 +116,13 @@ def threaded_metadata():
 def create_app():
     app = flask.Flask(__name__, static_folder="build")
 
-    if config["build_interval"] != 0:
+    if config.get("build_interval") != 0:
         print("\033[91mCREATING CRON JOB...\033[0m")
         sched = apscheduler.schedulers.background.BackgroundScheduler(daemon=True)
         sched.add_job(
             threaded_metadata,
             "interval",
-            minutes=config["build_interval"],
+            minutes=config.get("build_interval"),
         )
         sched.start()
         print("DONE.\n")
@@ -130,11 +130,11 @@ def create_app():
     config_categories = [d["id"] for d in config["category_list"]]
     metadata_categories = [d["id"] for d in metadata]
     if len(metadata) > 0 and sorted(config_categories) == sorted(metadata_categories):
-        if config["build_interval"] == 0:
+        if config.get("build_interval") == 0:
             return app
         elif datetime.datetime.utcnow() <= datetime.datetime.strptime(
             metadata[-1]["buildTime"], "%Y-%m-%d %H:%M:%S.%f"
-        ) + datetime.timedelta(minutes=config["build_interval"]):
+        ) + datetime.timedelta(minutes=config.get("build_interval")):
             return app
         else:
             threaded_metadata()
@@ -169,11 +169,10 @@ def authAPI():
         return (
             flask.jsonify(
                 {
-                    "success": {
-                        "code": 200,
-                        "content": "/browse",
-                        "message": "Authentication completed successfully!",
-                    }
+                    "code": 200,
+                    "content": "/browse",
+                    "message": "Authentication completed successfully.",
+                    "success": True,
                 }
             ),
             200,
@@ -182,11 +181,10 @@ def authAPI():
         return (
             flask.jsonify(
                 {
-                    "success": {
-                        "code": 202,
-                        "conntent": config.get("signup"),
-                        "message": "Signup is available on this server.",
-                    }
+                    "code": 202,
+                    "conntent": config.get("signup"),
+                    "message": "Signup is available on this server.",
+                    "success": True,
                 }
             ),
             202,
@@ -202,18 +200,38 @@ def authAPI():
             ),
             None,
         )
-        return flask.jsonify(account), 200
+        return (
+            flask.jsonify(
+                {
+                    "code": 200,
+                    "content": account,
+                    "message": "Authentication was successful.",
+                    "success": True,
+                }
+            ),
+            200,
+        )
     elif any(a == account["auth"] for account in config["account_list"]):
         account = next((i for i in config["account_list"] if i["auth"] == a), None)
-        return flask.jsonify(account), 200
+        return (
+            flask.jsonify(
+                {
+                    "code": 200,
+                    "content": account,
+                    "message": "Authentication was successful.",
+                    "success": True,
+                }
+            ),
+            200,
+        )
     else:
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "The username and/or password provided was incorrect.",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "The username and/or password provided was incorrect.",
+                    "success": False,
                 }
             ),
             401,
@@ -230,10 +248,10 @@ def signupAPI():
             return (
                 flask.jsonify(
                     {
-                        "error": {
-                            "code": 409,
-                            "message": "An account with this username already exists.",
-                        }
+                        "code": 409,
+                        "content": None,
+                        "message": "An account with this username already exists.",
+                        "success": False,
                     }
                 ),
                 409,
@@ -248,11 +266,10 @@ def signupAPI():
             return (
                 flask.jsonify(
                     {
-                        "success": {
-                            "code": 200,
-                            "content": account,
-                            "message": "Registration successful!",
-                        }
+                        "code": 200,
+                        "content": account,
+                        "message": "Registration successful.",
+                        "success": True,
                     }
                 ),
                 200,
@@ -261,10 +278,10 @@ def signupAPI():
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "This server has disabled user sign up.",
-                    }
+                    "code": 401,
+                    "content": True,
+                    "message": "This server has disabled user sign up.",
+                    "success": False,
                 }
             ),
             401,
@@ -295,19 +312,49 @@ def environmentAPI():
                     "account_list": account,
                     "category_list": category_list,
                 }
-                return flask.jsonify(tmp_environment), 200
+                return (
+                    flask.jsonify(
+                        {
+                            "code": 200,
+                            "content": tmp_environment,
+                            "message": "Environment permissions sent successfully.",
+                            "success": True,
+                        }
+                    ),
+                    200,
+                )
             else:
                 tmp_environment = {
                     "account_list": account,
                     "category_list": config["category_list"],
                 }
-                return flask.jsonify(tmp_environment), 200
+                return (
+                    flask.jsonify(
+                        {
+                            "code": 200,
+                            "content": tmp_environment,
+                            "message": "Environment permissions sent successfully.",
+                            "success": True,
+                        }
+                    ),
+                    200,
+                )
         else:
             tmp_environment = {
                 "account_list": {"pic": "k"},
                 "category_list": config["category_list"],
             }
-            return flask.jsonify(tmp_environment), 200
+            return (
+                flask.jsonify(
+                    {
+                        "code": 200,
+                        "content": tmp_environment,
+                        "message": "Environment permissions sent successfully.",
+                        "success": True,
+                    }
+                ),
+                200,
+            )
 
 
 @app.route("/api/v1/metadata")
@@ -330,8 +377,11 @@ def metadataAPI():
             category_config = next(
                 (i for i in config["category_list"] if i["id"] == category["id"]), None
             )
-            if category_config.get("whitelist"):
-                if account["auth"] in category_config["whitelist"]:
+            if category_config:
+                if category_config.get("whitelist"):
+                    if account["auth"] in category_config.get("whitelist"):
+                        whitelisted_categories_metadata.append(category)
+                else:
                     whitelisted_categories_metadata.append(category)
             else:
                 whitelisted_categories_metadata.append(category)
@@ -353,10 +403,10 @@ def metadataAPI():
                 return (
                     flask.jsonify(
                         {
-                            "error": {
-                                "code": 400,
-                                "message": "The category provided could not be found.",
-                            }
+                            "code": 400,
+                            "content": None,
+                            "message": "The category provided could not be found.",
+                            "success": False,
                         }
                     ),
                     400,
@@ -442,7 +492,18 @@ def metadataAPI():
                     except:
                         pass
                 else:
-                    return None
+                    return (
+                        flask.jsonify(
+                            {
+                                "code": 400,
+                                "content": None,
+                                "message": "Bad request! Sorting parameter '%s' does not exist."
+                                % (s),
+                                "success": False,
+                            }
+                        ),
+                        400,
+                    )
                 index += 1
         if r:
             index = 0
@@ -467,7 +528,17 @@ def metadataAPI():
                         else:
                             item["type"] = "file"
                             tmp_metadata["children"].append(item)
-                return flask.jsonify(tmp_metadata), 200
+                return (
+                    flask.jsonify(
+                        {
+                            "code": 200,
+                            "content": tmp_metadata,
+                            "message": "Metadata parsed successfully.",
+                            "success": True,
+                        }
+                    ),
+                    200,
+                )
             tmp_metadata = (
                 drive.files().get(fileId=id, supportsAllDrives=True).execute()
             )
@@ -485,15 +556,25 @@ def metadataAPI():
                         tmp_metadata["type"] = "file"
                         tmp_metadata["children"].append(item)
 
-        return flask.jsonify(tmp_metadata), 200
+        return (
+            flask.jsonify(
+                {
+                    "code": 200,
+                    "content": tmp_metadata,
+                    "message": "Metadata parsed successfully.",
+                    "success": True,
+                }
+            ),
+            200,
+        )
     else:
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "Your credentials are invalid!",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "Your credentials are invalid.",
+                    "success": False,
                 }
             ),
             401,
@@ -514,6 +595,8 @@ def downloadRedirectAPI(name):
         <= datetime.datetime.utcnow()
     ):
         config, drive = src.credentials.refreshCredentials(config)
+        with open("config.json", "w+") as w:
+            json.dump(obj=config, fp=w, sort_keys=True, indent=4)
 
     tmp_metadata = src.metadata.jsonExtract(
         src.metadata.readMetadata(config), "id", id, False
@@ -637,10 +720,10 @@ def downloadAPI(name):
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "Your credentials are invalid!",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "Your credentials are invalid.",
+                    "success": False,
                 }
             ),
             401,
@@ -663,7 +746,7 @@ def stream_mapAPI():
             {
                 "name": "Original",
                 "url": "%s/api/v1/redirectdownload/%s?a=%s&id=%s"
-                % (server, name, a, id),
+                % (server, urllib.parse.quote(name), a, id),
                 "type": "normal",
             }
         ]
@@ -680,36 +763,34 @@ def stream_mapAPI():
                         {
                             "name": fmt_data[1],
                             "url": "%s/api/v1/redirectdownload/%s?a=%s&id=%s&itag=%s"
-                            % (server, name, a, id, fmt_data[0]),
+                            % (server, urllib.parse.quote(name), a, id, fmt_data[0]),
                             "type": "auto",
                         }
                     )
                 return flask.jsonify(
                     {
-                        "success": {
-                            "code": 200,
-                            "content": stream_list,
-                            "message": "Stream list generated successfully!",
-                        }
+                        "code": 200,
+                        "content": stream_list,
+                        "message": "Stream list generated successfully.",
+                        "success": True,
                     }
                 )
         return flask.jsonify(
             {
-                "success": {
-                    "code": 200,
-                    "content": stream_list,
-                    "message": "Stream list generated successfully!",
-                }
+                "code": 200,
+                "content": stream_list,
+                "message": "Stream list generated successfully!",
+                "success": True,
             }
         )
     else:
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "Your credentials are invalid!",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "Your credentials are invalid.",
+                    "success": False,
                 }
             ),
             401,
@@ -722,15 +803,24 @@ def configAPI():
     if flask.request.method == "GET":
         secret = flask.request.args.get("secret")
         if secret == config.get("secret_key"):
-            return flask.jsonify(config), 200
+            return (
+                flask.jsonify(
+                    {
+                        "code": 200,
+                        "content": config,
+                        "message": "Config authentication completed successfully.",
+                        "success": True,
+                    }
+                ),
+                200,
+            )
         else:
             return (
                 flask.jsonify(
                     {
-                        "error": {
-                            "code": 401,
-                            "message": "The secret key provided was incorrect.",
-                        }
+                        "code": 401,
+                        "message": "The secret key provided was incorrect.",
+                        "success": False,
                     }
                 ),
                 401,
@@ -750,10 +840,10 @@ def configAPI():
             return (
                 flask.jsonify(
                     {
-                        "success": {
-                            "code": 200,
-                            "message": "libDrive is updating your config",
-                        }
+                        "code": 200,
+                        "content": None,
+                        "message": "libDrive is updating your config",
+                        "success": True,
                     }
                 ),
                 200,
@@ -762,10 +852,10 @@ def configAPI():
             return (
                 flask.jsonify(
                     {
-                        "error": {
-                            "code": 401,
-                            "message": "The secret key provided was incorrect.",
-                        }
+                        "code": 401,
+                        "content": None,
+                        "message": "The secret key provided was incorrect.",
+                        "success": False,
                     }
                 ),
                 401,
@@ -854,10 +944,10 @@ def imageAPI(image_type):
             return (
                 flask.jsonify(
                     {
-                        "error": {
-                            "code": 500,
-                            "message": "The thumbnail does not exist on Google's servers.",
-                        }
+                        "code": 500,
+                        "content": None,
+                        "message": "The thumbnail does not exist on Google's servers.",
+                        "success": False,
                     }
                 ),
                 500,
@@ -878,10 +968,10 @@ def rebuildAPI():
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "The secret key provided was incorrect.",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "The secret key provided was incorrect.",
+                    "success": False,
                 }
             ),
             401,
@@ -892,16 +982,16 @@ def rebuildAPI():
 def restartAPI():
     config = src.config.readConfig()
     secret = flask.request.args.get("secret")
-    if secret == config["secret_key"]:
+    if secret == config.get("secret_key"):
         os.execv(sys.executable, [sys.executable] + sys.argv)
     else:
         return (
             flask.jsonify(
                 {
-                    "error": {
-                        "code": 401,
-                        "message": "The secret key provided was incorrect.",
-                    }
+                    "code": 401,
+                    "content": None,
+                    "message": "The secret key provided was incorrect.",
+                    "success": False,
                 }
             ),
             401,
@@ -910,23 +1000,46 @@ def restartAPI():
 
 @app.route("/api/v1/ping")
 def pingAPI():
-    return (
-        {
-            "success": {
+    date = flask.request.args.get("date")
+    if date:
+        send = datetime.datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ")
+        receive = datetime.datetime.utcnow()
+        diff = receive - send
+        return {
+            "code": 200,
+            "content": {
+                "ping": diff.total_seconds(),
+                "send_time": send.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                "receive_time": receive.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            },
+            "message": "You have a one way ping of %s seconds" % (diff.total_seconds()),
+        }
+    else:
+        return (
+            {
                 "code": 200,
-                "message": "Pong",
-            }
-        },
-        200,
-    )
+                "content": "Pong",
+                "message": "Ping received.",
+                "success": True,
+            },
+            200,
+        )
 
 
 if __name__ == "__main__":
     print("\033[91mSERVING SERVER...\033[0m")
     print("DONE.\n")
+    LIBDRIVE_DEBUG = os.getenv("LIBDRIVE_DEBUG")
+    if LIBDRIVE_DEBUG:
+        if LIBDRIVE_DEBUG.lower() == "true":
+            LIBDRIVE_DEBUG = True
+        else:
+            LIBDRIVE_DEBUG = False
+    else:
+        LIBDRIVE_DEBUG = False
     app.run(
         host="0.0.0.0",
         port=31145,
         threaded=True,
-        debug=os.getenv("LIBDRIVE_DEBUG"),
+        debug=LIBDRIVE_DEBUG,
     )
