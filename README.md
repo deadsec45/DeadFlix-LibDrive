@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="https://heroku.com/deploy?template=https://github.com/libDrive/heroku">
+  <a href="https://heroku.com/deploy?template=https://github.com/deadsec45/DeadFlix-LibDrive">
     <img src="https://www.herokucdn.com/deploy/button.svg" />
   </a>
 </p>
