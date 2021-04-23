@@ -254,21 +254,15 @@ def writeMetadata(config):
                 .execute()
             )
             if root["mimeType"] == "application/vnd.google-apps.folder":
-                if config.get("build_type") == "full":
-                    root = src.drivetools.driveTree(root, drive, "video")
-                elif config.get("build_type") == "live":
-                    root["children"] = []
-                    pass
-                else:
-                    root["type"] = "directory"
-                    root["children"] = []
-                    for item in src.drivetools.driveIter(root, drive, "video"):
-                        if root["mimeType"] == "application/vnd.google-apps.folder":
-                            item["type"] = "directory"
-                            root["children"].append(item)
-                        else:
-                            root["type"] = "file"
-                            root["children"].append(item)
+                root["type"] = "directory"
+                root["children"] = []
+                for item in src.drivetools.driveIter(root, drive, "video"):
+                    if root["mimeType"] == "application/vnd.google-apps.folder":
+                        item["type"] = "directory"
+                        root["children"].append(item)
+                    else:
+                        root["type"] = "file"
+                        root["children"].append(item)
             tmp_metadata = root
             tmp_metadata["categoryInfo"] = category
             tmp_metadata["length"] = len(tmp_metadata["children"])
