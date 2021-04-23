@@ -69,11 +69,6 @@ if os.getenv("LIBDRIVE_CLOUD") and config.get("refresh_token"):
         metadata = json.loads(fh.getvalue())
         with open("metadata.json", "w+") as w:
             json.dump(metadata, w)
-global font_req
-font_req = requests.get(
-    "https://raw.githack.com/googlefonts/roboto/master/src/hinted/Roboto-Regular.ttf",
-    "rb",
-)
 print("DONE.\n")
 
 
@@ -151,7 +146,7 @@ app.secret_key = config.get("secret_key")
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
-def serve(path):
+async def serve(path):
     if (path != "") and os.path.exists("%s/%s" % (app.static_folder, path)):
         return flask.send_from_directory(app.static_folder, path)
     else:
@@ -159,7 +154,7 @@ def serve(path):
 
 
 @app.route("/api/v1/auth")
-def authAPI():
+async def authAPI():
     config = src.config.readConfig()
     u = flask.request.args.get("u")  # USERNAME
     p = flask.request.args.get("p")  # PASSWORD
@@ -239,7 +234,7 @@ def authAPI():
 
 
 @app.route("/api/v1/signup")
-def signupAPI():
+async def signupAPI():
     config = src.config.readConfig()
     u = flask.request.args.get("u")  # USERNAME
     p = flask.request.args.get("p")  # PASSWORD
@@ -289,7 +284,7 @@ def signupAPI():
 
 
 @app.route("/api/v1/environment")
-def environmentAPI():
+async def environmentAPI():
     config = src.config.readConfig()
     a = flask.request.args.get("a")  # AUTH
     if (
@@ -358,7 +353,7 @@ def environmentAPI():
 
 
 @app.route("/api/v1/metadata")
-def metadataAPI():
+async def metadataAPI():
     config = src.config.readConfig()
     tmp_metadata = src.metadata.readMetadata(config)
     a = flask.request.args.get("a")  # AUTH
@@ -516,18 +511,21 @@ def metadataAPI():
             tmp_metadata = src.metadata.jsonExtract(tmp_metadata, "id", id, False)
             config, drive = src.credentials.refreshCredentials(config)
             if tmp_metadata:
-                tmp_metadata["children"] = []
-                if (
-                    tmp_metadata.get("title")
-                    and tmp_metadata.get("type") == "directory"
-                ):
-                    for item in src.drivetools.driveIter(tmp_metadata, drive, "video"):
-                        if item["mimeType"] == "application/vnd.google-apps.folder":
-                            item["type"] = "directory"
-                            tmp_metadata["children"].append(item)
-                        else:
-                            item["type"] = "file"
-                            tmp_metadata["children"].append(item)
+                if config.get("build_type") == "hybrid":
+                    tmp_metadata["children"] = []
+                    if (
+                        tmp_metadata.get("title")
+                        and tmp_metadata.get("type") == "directory"
+                    ):
+                        for item in src.drivetools.driveIter(tmp_metadata, drive, "video"):
+                            if item["mimeType"] == "application/vnd.google-apps.folder":
+                                item["type"] = "directory"
+                                tmp_metadata["children"].append(item)
+                            else:
+                                item["type"] = "file"
+                                tmp_metadata["children"].append(item)
+                elif config.get("build_type") == "full":
+                    pass
                 return (
                     flask.jsonify(
                         {
@@ -582,7 +580,7 @@ def metadataAPI():
 
 
 @app.route("/api/v1/redirectdownload/<name>")
-def downloadRedirectAPI(name):
+async def downloadRedirectAPI(name):
     id = flask.request.args.get("id")
     itag = flask.request.args.get("itag")
 
@@ -731,7 +729,7 @@ def downloadAPI(name):
 
 
 @app.route("/api/v1/stream_map")
-def stream_mapAPI():
+async def stream_mapAPI():
     a = flask.request.args.get("a")
     id = flask.request.args.get("id")
     name = flask.request.args.get("name")
@@ -798,7 +796,7 @@ def stream_mapAPI():
 
 
 @app.route("/api/v1/config", methods=["GET", "POST"])
-def configAPI():
+async def configAPI():
     config = src.config.readConfig()
     if flask.request.method == "GET":
         secret = flask.request.args.get("secret")
@@ -863,7 +861,7 @@ def configAPI():
 
 
 @app.route("/api/v1/image/<image_type>")
-def imageAPI(image_type):
+async def imageAPI(image_type):
     text = flask.request.args.get("text")
     extention = flask.request.args.get("extention")
     if image_type == "poster":
@@ -871,8 +869,7 @@ def imageAPI(image_type):
         draw = ImageDraw.Draw(img)
 
         font_size = 1
-        font_bytes = io.BytesIO(font_req.content)
-        font = ImageFont.truetype(font_bytes, font_size)
+        font = ImageFont.truetype(font="arial.ttf", size=font_size)
         img_fraction = 0.9
         breakpoint = img_fraction * img.size[0]
         jumpsize = 75
@@ -882,8 +879,7 @@ def imageAPI(image_type):
             else:
                 jumpsize = jumpsize // 2
                 font_size -= jumpsize
-            font_bytes = io.BytesIO(font_req.content)
-            font = ImageFont.truetype(font_bytes, font_size)
+            font = ImageFont.truetype(font="arial.ttf", size=font_size)
             if jumpsize <= 1:
                 break
 
@@ -902,8 +898,7 @@ def imageAPI(image_type):
         draw = ImageDraw.Draw(img)
 
         font_size = 1
-        font_bytes = io.BytesIO(font_req.content)
-        font = ImageFont.truetype(font_bytes, font_size)
+        font = ImageFont.truetype(font="arial.ttf", size=font_size)
         img_fraction = 0.9
         breakpoint = img_fraction * img.size[0]
         jumpsize = 75
@@ -913,8 +908,7 @@ def imageAPI(image_type):
             else:
                 jumpsize = jumpsize // 2
                 font_size -= jumpsize
-            font_bytes = io.BytesIO(font_req.content)
-            font = ImageFont.truetype(font_bytes, font_size)
+            font = ImageFont.truetype(font="arial.ttf", size=font_size)
             if jumpsize <= 1:
                 break
 
@@ -999,7 +993,7 @@ def restartAPI():
 
 
 @app.route("/api/v1/ping")
-def pingAPI():
+async def pingAPI():
     date = flask.request.args.get("date")
     if date:
         send = datetime.datetime.strptime(date, "%Y-%m-%dT%H:%M:%S.%fZ")
