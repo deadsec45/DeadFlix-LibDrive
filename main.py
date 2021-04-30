@@ -23,7 +23,7 @@ import src.metadata
 
 colorama.init()
 print(
-    "====================================================\n\033[96m               libDrive - \033[92mv1.2.8\033[94m\n                   @eliasbenb\033[0m\n====================================================\n"
+    "====================================================\n\033[96m               libDrive - \033[92mv1.2.9\033[94m\n                   @eliasbenb\033[0m\n====================================================\n"
 )
 
 
@@ -71,6 +71,26 @@ if os.getenv("LIBDRIVE_CLOUD") and config.get("refresh_token"):
             json.dump(metadata, w)
 print("DONE.\n")
 
+if not config.get("account_list"):
+    config["account_list"] = []
+if not config.get("auth"):
+    config["auth"] = False
+if not config.get("build_interval"):
+    config["build_interval"] = 360
+if not config.get("build_type"):
+    config["build_type"] = "hybrid"
+if not config.get("category_list"):
+    config["category_list"] = []
+if not config.get("cloudflare"):
+    config["cloudflare"] = ""
+if not config.get("transcoded"):
+    config["transcoded"] = False
+if not config.get("signup"):
+    config["signup"] = False
+
+with open("config.json", "w+") as w:
+    json.dump(obj=config, fp=w, sort_keys=True, indent=4)
+
 
 def threaded_metadata():
     for thread in threading.enumerate():
@@ -109,15 +129,48 @@ def threaded_metadata():
 
 
 def create_app():
+    if config.get("arcio") and config.get("arcio") != "":
+        req = requests.get("https://arc.io/arc-sw.js")
+        with open("./build/arc-sw.js", "wb") as wb:
+            wb.write(req.content)
+        with open("./build/index.html", "r+") as r:
+            old_html = re.sub(
+                r"<script async src='https:\/\/arc.io\/widget.min.js#(?P<arcio_id>.{3,}'><\/script>)",
+                "",
+                r.read(),
+            )
+            new_html = old_html.replace(
+                "<head>",
+                "<head><script async src='https://arc.io/widget.min.js#%s'></script>"
+                % (config.get("arcio")),
+            )
+            r.seek(0)
+            r.write(new_html)
+    else:
+        if os.path.exists("./build/arc-sw.js"):
+            os.remove("./build/arc-sw.js")
+        with open("./build/index.html", "r+") as r:
+            old_html = r.read()
+            new_html = new_html = re.sub(
+                r"<script async src='https:\/\/arc.io\/widget.min.js#(?P<arcio_id>.{3,}'><\/script>)",
+                "",
+                old_html,
+            )
+            r.seek(0)
+            r.write(new_html)
+
     app = flask.Flask(__name__, static_folder="build")
 
-    if config.get("build_interval") != 0:
+    build_interval = config.get("build_interval")
+    if not build_interval:
+        build_interval = 360
+    if build_interval != 0:
         print("\033[91mCREATING CRON JOB...\033[0m")
         sched = apscheduler.schedulers.background.BackgroundScheduler(daemon=True)
         sched.add_job(
             threaded_metadata,
             "interval",
-            minutes=config.get("build_interval"),
+            minutes=build_interval,
         )
         sched.start()
         print("DONE.\n")
@@ -125,11 +178,11 @@ def create_app():
     config_categories = [d["id"] for d in config["category_list"]]
     metadata_categories = [d["id"] for d in metadata]
     if len(metadata) > 0 and sorted(config_categories) == sorted(metadata_categories):
-        if config.get("build_interval") == 0:
+        if build_interval == 0:
             return app
         elif datetime.datetime.utcnow() <= datetime.datetime.strptime(
             metadata[-1]["buildTime"], "%Y-%m-%d %H:%M:%S.%f"
-        ) + datetime.timedelta(minutes=config.get("build_interval")):
+        ) + datetime.timedelta(minutes=build_interval):
             return app
         else:
             threaded_metadata()
@@ -173,17 +226,30 @@ async def authAPI():
             200,
         )
     elif rules == "signup":
-        return (
-            flask.jsonify(
-                {
-                    "code": 202,
-                    "conntent": config.get("signup"),
-                    "message": "Signup is available on this server.",
-                    "success": True,
-                }
-            ),
-            202,
-        )
+        if config.get("signup") == True:
+            return (
+                flask.jsonify(
+                    {
+                        "code": 202,
+                        "content": True,
+                        "message": "Signup is available on this server.",
+                        "success": True,
+                    }
+                ),
+                202,
+            )
+        else:
+            return (
+                flask.jsonify(
+                    {
+                        "code": 202,
+                        "content": False,
+                        "message": "Signup is not available on this server.",
+                        "success": True,
+                    }
+                ),
+                202,
+            )
     elif any(u == account["username"] for account in config["account_list"]) and any(
         p == account["password"] for account in config["account_list"]
     ):
@@ -519,7 +585,9 @@ async def metadataAPI():
                         tmp_metadata.get("title")
                         and tmp_metadata.get("type") == "directory"
                     ):
-                        for item in src.drivetools.driveIter(tmp_metadata, drive, "video"):
+                        for item in src.drivetools.driveIter(
+                            tmp_metadata, drive, "video"
+                        ):
                             if item["mimeType"] == "application/vnd.google-apps.folder":
                                 item["type"] = "directory"
                                 tmp_metadata["children"].append(item)
@@ -585,6 +653,9 @@ async def downloadRedirectAPI(name):
     itag = flask.request.args.get("itag")
 
     config = src.config.readConfig()
+    if config.get("kill_switch") == True:
+        return
+
     if (
         datetime.datetime.strptime(
             config.get("token_expiry", datetime.datetime.utcnow()),
@@ -736,6 +807,16 @@ async def stream_mapAPI():
     server = flask.request.args.get("server")
 
     config = src.config.readConfig()
+    if config.get("kill_switch") == True:
+        return flask.jsonify(
+            {
+                "code": 200,
+                "content": [{"name": "UNAVAILABLE", "url": "", "type": "normal"}],
+                "message": "Stream list generated successfully.",
+                "success": True,
+            }
+        )
+
     if (
         any(a == account["auth"] for account in config["account_list"])
         or config.get("auth") == False
